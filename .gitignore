@@ -1,0 +1,22 @@
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+
+# Scala / sbt
+target/
+project/project/
+project/target/
+.metals/
+.bloop/
+
+# Node (future UI assets)
+node_modules/
+
+# Docker
+*.log
