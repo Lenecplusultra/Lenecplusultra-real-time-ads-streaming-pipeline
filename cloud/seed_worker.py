@@ -1,7 +1,7 @@
 # cloud/seed_worker.py
 import os, random
 from datetime import datetime, timedelta, timezone
-import psycopg  # psycopg[binary]
+import psycopg
 
 def need(name: str) -> str:
     v = os.getenv(name)
@@ -10,7 +10,7 @@ def need(name: str) -> str:
     return v
 
 def main():
-    host = need("NEON_HOST_DIRECT")  # direct writer host (NO -pooler in the name)
+    host = need("NEON_HOST_DIRECT")            # NO "-pooler" here
     db   = os.getenv("NEON_DB", "adsdb")
     user = need("NEON_USER")
     pwd  = need("NEON_PASS")
@@ -18,13 +18,13 @@ def main():
 
     dsn = f"host={host} port=5432 dbname={db} user={user} password={pwd} sslmode=require"
 
-    campaigns = ["cmp-001", "cmp-002", "cmp-003", "cmp-004"]
-
+    # prepare rows
     now = datetime.now(timezone.utc).replace(microsecond=0)
+    campaigns = ["cmp-001", "cmp-002", "cmp-003", "cmp-004"]
     rows = []
     for i in range(nwin):
         end = now - timedelta(seconds=10 * i)
-        end = end.replace(second=(end.second // 10) * 10)   # align to 10s
+        end = end.replace(second=(end.second // 10) * 10)
         start = end - timedelta(seconds=10)
         for cid in campaigns:
             clicks = random.randint(0, 8)
@@ -43,7 +43,6 @@ def main():
     );
     """
 
-    # *** psycopg3 placeholders are %s ***
     upsert_sql = """
     INSERT INTO campaign_agg
       (window_start, window_end, campaign_id, clicks, unique_users, ctr)
@@ -55,10 +54,9 @@ def main():
       ctr          = EXCLUDED.ctr;
     """
 
-    with psycopg.connect(dsn) as conn:
-        with conn.cursor() as cur:
-            cur.execute(create_sql)
-            cur.executemany(upsert_sql, rows)
+    with psycopg.connect(dsn) as conn, conn.cursor() as cur:
+        cur.execute(create_sql)
+        cur.executemany(upsert_sql, rows)
         conn.commit()
 
     print(f"Upserted {len(rows)} rows")
