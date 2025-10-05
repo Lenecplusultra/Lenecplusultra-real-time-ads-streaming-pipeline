@@ -28,4 +28,4 @@ jobs:
           WINDOW_SECONDS:   "10"
           N_WINDOWS:        "12"   # last 2 minutes (12 * 10s). Adjust to taste
         run: |
-          python cloud/seed_worker.py
+          python cloud/seed_once.py
