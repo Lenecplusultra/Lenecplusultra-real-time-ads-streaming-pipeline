@@ -1,31 +1,31 @@
 name: demo-seed
 
 on:
+  workflow_dispatch:
   schedule:
-    - cron: "*/5 * * * *"   # every ~5 minutes (GitHub enforces minute-level but executes ~5m)
-  workflow_dispatch:        # allow manual "Run workflow" from the Actions tab
+    - cron: "*/5 * * * *"  # every 5 minutes
 
 jobs:
   seed:
     runs-on: ubuntu-latest
-    timeout-minutes: 3
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
-      - run: pip install psycopg[binary]==3.2.1
+      - name: Install deps
+        run: pip install "psycopg[binary]==3.2.1"
 
       - name: Upsert last N windows into Neon
         env:
-          NEON_HOST_DIRECT: ${{ secrets.NEON_HOST_DIRECT }}
-          NEON_DB:          ${{ secrets.NEON_DB }}
-          NEON_USER:        ${{ secrets.NEON_USER }}
-          NEON_PASS:        ${{ secrets.NEON_PASS }}
-          CAMPAIGNS:        "cmp-001,cmp-002,cmp-003,cmp-004"
-          WINDOW_SECONDS:   "10"
-          N_WINDOWS:        "12"   # last 2 minutes (12 * 10s). Adjust to taste
-        run: |
-          python cloud/seed_once.py
+          NEON_HOST_DIRECT: ${{ secrets.NEON_HOST_DIRECT }}  # direct host (NO -pooler)
+          NEON_DB:         ${{ secrets.NEON_DB }}
+          NEON_USER:       ${{ secrets.NEON_USER }}
+          NEON_PASS:       ${{ secrets.NEON_PASS }}
+          NUM_WINDOWS:     "36"  # ~6 minutes
+        run: python cloud/seed_once.py
+
