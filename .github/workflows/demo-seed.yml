@@ -27,5 +27,5 @@ jobs:
           NEON_USER:       ${{ secrets.NEON_USER }}
           NEON_PASS:       ${{ secrets.NEON_PASS }}
           NUM_WINDOWS:     "36"  # ~6 minutes
-        run: python cloud/seed_once.py
+        run: python cloud/seed_worker.py
 
