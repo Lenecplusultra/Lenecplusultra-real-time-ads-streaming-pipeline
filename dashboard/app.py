@@ -6,12 +6,23 @@ import streamlit as st
 st.set_page_config(page_title="Real-Time Ads", layout="wide")
 st.title("📈 Real-Time Ads Streaming — Campaign Metrics")
 
-import os
-DB_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql+psycopg2://ads:ads@localhost:5433/adsdb"  # local default
-)
-ENGINE = create_engine(DB_URL, pool_pre_ping=True, pool_recycle=300)
+import os, urllib.parse
+from sqlalchemy import create_engine
+
+# Prefer a full DATABASE_URL if provided
+db_url = os.getenv("DATABASE_URL", "").strip()
+
+if not db_url:
+    # Build from components (recommended if your password has special chars)
+    host = os.getenv("DB_HOST_POOLED", "ep-dry-shape-ad0cywr3-pooler.c-2.us-east-1.aws.neon.tech")
+    user = os.getenv("DB_USER", "neondb_owner")
+    pwd  = os.getenv("DB_PASS", "")
+    db   = os.getenv("DB_NAME", "adsdb")
+    enc_pwd = urllib.parse.quote_plus(pwd)
+    db_url = f"postgresql+psycopg2://{user}:{enc_pwd}@{host}/{db}?sslmode=require"
+
+ENGINE = create_engine(db_url, pool_pre_ping=True, pool_recycle=300)
+
 
 @st.cache_data(ttl=5)
 def load_data(minutes: int = 15) -> pd.DataFrame:

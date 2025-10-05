@@ -10,6 +10,7 @@ object AdsStreamingApp {
     val spark = SparkSession.builder()
       .appName("RealTimeAdsStreaming")
       .master("local[*]")
+      .config("spark.driver.bindAddress", "127.0.0.1")
       .getOrCreate()
 
     spark.conf.set("spark.sql.session.timeZone", "UTC")
