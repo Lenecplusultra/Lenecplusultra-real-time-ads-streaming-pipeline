@@ -56,9 +56,10 @@ object AdsStreamingApp {
       )
 
     // ---------- Postgres sink ----------
-    val jdbcUrl = "jdbc:postgresql://localhost:5433/adsdb"
-    val user    = "ads"
-    val pass    = "ads"
+    val jdbcUrl = sys.env.getOrElse("JDBC_URL", "jdbc:postgresql://localhost:5433/adsdb")
+    val user    = sys.env.getOrElse("DB_USER", "ads")
+    val pass    = sys.env.getOrElse("DB_PASS", "ads")
+
 
     val query = windowed.writeStream
       .outputMode("update")

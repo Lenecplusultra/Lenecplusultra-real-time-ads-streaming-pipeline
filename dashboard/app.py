@@ -6,8 +6,12 @@ import streamlit as st
 st.set_page_config(page_title="Real-Time Ads", layout="wide")
 st.title("📈 Real-Time Ads Streaming — Campaign Metrics")
 
-ENGINE = create_engine("postgresql+psycopg2://ads:ads@localhost:5433/adsdb",
-                       pool_pre_ping=True, pool_recycle=300)
+import os
+DB_URL = os.getenv(
+    "DATABASE_URL",
+    "postgresql+psycopg2://ads:ads@localhost:5433/adsdb"  # local default
+)
+ENGINE = create_engine(DB_URL, pool_pre_ping=True, pool_recycle=300)
 
 @st.cache_data(ttl=5)
 def load_data(minutes: int = 15) -> pd.DataFrame:
