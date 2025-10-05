@@ -22,10 +22,14 @@ jobs:
 
       - name: Upsert last N windows into Neon
         env:
-          NEON_HOST_DIRECT: ${{ secrets.NEON_HOST_DIRECT }}  # direct host (NO -pooler)
+          NEON_HOST_DIRECT: ${{ secrets.NEON_HOST_DIRECT }}   # direct host (no -pooler)
           NEON_DB:         ${{ secrets.NEON_DB }}
           NEON_USER:       ${{ secrets.NEON_USER }}
           NEON_PASS:       ${{ secrets.NEON_PASS }}
-          NUM_WINDOWS:     "36"  # ~6 minutes
-        run: python cloud/seed_worker.py
+          NUM_WINDOWS:     "36"
+        run: |
+          python -V
+          python -c "import pathlib; p=pathlib.Path('cloud/seed_worker.py'); print('Seeder exists:', p.exists()); print('--- SQL preview ---'); print([l for l in p.read_text().splitlines() if 'INSERT INTO campaign_agg' in l or 'VALUES (' in l][0:3])"
+          python cloud/seed_worker.py
+
 
