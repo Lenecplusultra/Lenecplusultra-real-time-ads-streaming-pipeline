@@ -1,60 +1,85 @@
-# cloud/seed_once.py
-import os, random, math, psycopg
-from datetime import datetime, timezone, timedelta
+# cloud/seed_worker.py
+"""
+Upsert recent fake aggregates so the dashboard shows data even when producers are off.
 
-NEON_HOST   = os.environ["NEON_HOST_DIRECT"]      # ep-...c-2.us-east-1.aws.neon.tech
-NEON_DB     = os.environ.get("NEON_DB", "adsdb")
-NEON_USER   = os.environ.get("NEON_USER", "neondb_owner")
-NEON_PASS   = os.environ["NEON_PASS"]
-
-CAMPAIGNS = os.environ.get("CAMPAIGNS", "cmp-001,cmp-002,cmp-003,cmp-004").split(",")
-WINDOW_SECONDS = int(os.environ.get("WINDOW_SECONDS", "10"))
-N_WINDOWS = int(os.environ.get("N_WINDOWS", "12"))  # how many 10s windows to upsert (e.g., last 2 minutes)
-
-DSN = (
-    f"host={NEON_HOST} port=5432 dbname={NEON_DB} "
-    f"user={NEON_USER} password={NEON_PASS} sslmode=require"
-)
-
-UPSERT_SQL = """
-INSERT INTO campaign_agg (window_start, window_end, campaign_id, clicks, unique_users, ctr)
-VALUES ($1, $2, $3, $4, $5, NULL)
-ON CONFLICT (window_start, window_end, campaign_id)
-DO UPDATE SET
-  clicks       = EXCLUDED.clicks,
-  unique_users = EXCLUDED.unique_users,
-  ctr          = EXCLUDED.ctr;
+Env:
+  NEON_HOST_DIRECT  (direct host, NOT -pooler)
+  NEON_DB           (e.g. adsdb)
+  NEON_USER         (e.g. neondb_owner)
+  NEON_PASS
+  NUM_WINDOWS       (optional int; default 36 => ~6 minutes of 10s windows)
 """
 
-def align_to_window(ts: datetime, seconds=10):
-    epoch = int(ts.timestamp())
-    aligned = epoch - (epoch % seconds)
-    start = datetime.fromtimestamp(aligned, tz=timezone.utc)
-    end = start + timedelta(seconds=seconds)
-    return start, end
+import os
+import random
+from datetime import datetime, timedelta, timezone
 
-def clicks_users(seed: int):
-    rnd = random.Random(seed)
-    base = rnd.randint(1, 7)
-    wobble = int(3 * math.sin(seed / 13.0))
-    clicks = max(1, base + wobble)
-    users = max(1, clicks - rnd.randint(0, 3))
-    return clicks, users
+import psycopg  # pip install "psycopg[binary]==3.2.1"
+
+def require(name: str) -> str:
+    val = os.getenv(name)
+    if not val:
+        raise RuntimeError(f"Missing required env var: {name}")
+    return val
 
 def main():
-    now = datetime.now(timezone.utc)
-    _, aligned_end = align_to_window(now, WINDOW_SECONDS)
+    host = require("NEON_HOST_DIRECT")  # direct host (no -pooler)
+    db   = os.getenv("NEON_DB", "adsdb")
+    user = require("NEON_USER")
+    pwd  = require("NEON_PASS")
+    nwin = int(os.getenv("NUM_WINDOWS", "36"))
 
-    with psycopg.connect(DSN) as conn, conn.cursor() as cur:
-        # upsert N_WINDOWS windows ending at aligned_end
-        for i in range(N_WINDOWS, 0, -1):
-            w_end = aligned_end - timedelta(seconds=(i - 1) * WINDOW_SECONDS)
-            w_start = w_end - timedelta(seconds=WINDOW_SECONDS)
-            for c in CAMPAIGNS:
-                seed = int(w_start.timestamp()) ^ hash(c)
-                clicks, users = clicks_users(seed)
-                cur.execute(UPSERT_SQL, (w_start, w_end, c, clicks, users))
+    dsn = f"host={host} port=5432 dbname={db} user={user} password={pwd} sslmode=require"
+
+    # A few campaigns
+    campaigns = ["cmp-001", "cmp-002", "cmp-003", "cmp-004"]
+
+    # Build rows for the last N 10-second windows
+    now = datetime.now(timezone.utc)
+    rows = []
+    for i in range(nwin):
+        end = now - timedelta(seconds=10 * i)
+        end = end.replace(microsecond=0)
+        end_aligned = end - timedelta(seconds=end.second % 10)
+        start = end_aligned - timedelta(seconds=10)
+
+        for cid in campaigns:
+            clicks = random.randint(0, 8)
+            users  = max(0, clicks - random.randint(0, 3))
+            rows.append((start, end_aligned, cid, clicks, users))
+
+    create_sql = """
+    CREATE TABLE IF NOT EXISTS campaign_agg (
+      window_start timestamptz NOT NULL,
+      window_end   timestamptz NOT NULL,
+      campaign_id  text        NOT NULL,
+      clicks       bigint      NOT NULL,
+      unique_users bigint      NOT NULL,
+      ctr          double precision,
+      PRIMARY KEY (window_start, window_end, campaign_id)
+    );
+    """
+
+    # *** IMPORTANT: psycopg3 placeholders are %s ***
+    upsert_sql = """
+    INSERT INTO campaign_agg
+      (window_start, window_end, campaign_id, clicks, unique_users, ctr)
+    VALUES (%s, %s, %s, %s, %s, NULL)
+    ON CONFLICT (window_start, window_end, campaign_id)
+    DO UPDATE SET
+      clicks       = EXCLUDED.clicks,
+      unique_users = EXCLUDED.unique_users,
+      ctr          = EXCLUDED.ctr;
+    """
+
+    with psycopg.connect(dsn) as conn:
+        with conn.cursor() as cur:
+            cur.execute(create_sql)
+            # executemany uses the %s placeholders above
+            cur.executemany(upsert_sql, rows)
         conn.commit()
+
+    print(f"Upserted {len(rows)} rows")
 
 if __name__ == "__main__":
     main()
